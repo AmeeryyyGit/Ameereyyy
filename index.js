@@ -1,38 +1,37 @@
-const { default: makeWASocket, useSingleFileAuthState } = require("@whiskeysockets/baileys")
+const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
 const { Boom } = require("@hapi/boom")
-const fs = require("fs")
-const pino = require("pino")
 
-const { state, saveState } = useSingleFileAuthState("./auth_info.json")
+async function connectToWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys")
 
-async function startBot() {
   const sock = makeWASocket({
-    logger: pino({ level: "silent" }),
-    printQRInTerminal: true,
-    auth: state
+    auth: state,
+    printQRInTerminal: true
   })
 
-  sock.ev.on("creds.update", saveState)
+  sock.ev.on("creds.update", saveCreds)
 
-  sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    const msg = messages[0]
-    if (!msg.message) return
-
-    const from = msg.key.remoteJid
-    const messageContent = msg.message.conversation || msg.message.extendedTextMessage?.text
-
-    if (messageContent === ".menu") {
-      await sock.sendMessage(from, { text: "✨ Ameereyyy UserBot Menu ✨\n\n✅ .menu\n✅ .ping\n✅ .owner" })
+  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+    if (connection === "close") {
+      const shouldReconnect = (lastDisconnect.error = Boom)?.output?.statusCode !== DisconnectReason.loggedOut
+      console.log("connection closed due to", lastDisconnect.error, ", reconnecting", shouldReconnect)
+      if (shouldReconnect) connectToWhatsApp()
+    } else if (connection === "open") {
+      console.log("opened connection")
     }
+  })
 
-    if (messageContent === ".ping") {
-      await sock.sendMessage(from, { text: "🏓 Pong!" })
-    }
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    const m = messages[0]
+    if (!m.message) return
 
-    if (messageContent === ".owner") {
-      await sock.sendMessage(from, { text: "👑 Created by @AmeereyyyGit" })
+    const msgType = Object.keys(m.message)[0]
+    const sender = m.key.remoteJid
+
+    if (msgType === "conversation" && m.message.conversation === ".menu") {
+      await sock.sendMessage(sender, { text: "✨ *Ameereyyy WhatsApp Bot*\n\n✅ Working perfectly!" })
     }
   })
 }
 
-startBot()
+connectToWhatsApp()
