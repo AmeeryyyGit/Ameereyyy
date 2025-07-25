@@ -1,19 +1,19 @@
 const { DisconnectReason } = require('@whiskeysockets/baileys');
-const Boom = require('@hapi/boom');
+const { isBoom } = require('@hapi/boom');
 const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
 
-  const sock = makeWASocket({
-    auth: state
-  });
+  const sock = makeWASocket({ auth: state });
 
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
     if (connection === "close") {
-      const shouldReconnect = Boom(lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+      const shouldReconnect = isBoom(lastDisconnect?.error)
+        ? lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut
+        : true;
       console.log("connection closed due to", lastDisconnect.error, ", reconnecting", shouldReconnect);
       if (shouldReconnect) connectToWhatsApp();
     } else if (connection === "open") {
